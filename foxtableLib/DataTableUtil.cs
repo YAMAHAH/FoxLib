@@ -1,20 +1,21 @@
-﻿using System;
-using Newtonsoft.Json;
-using System.Data;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
+using System.Reflection;
 using System.Web.Script.Serialization;
 
-namespace FoxtableLib
+namespace FT
 {
-    public class DataTableUtil
+    public class DTUtil
     {
         public static DataTable Init()
         {
             String json = "[{\"id\":\"00e58d51\",\"data\":[{\"mac\":\"20:f1:7c:c5:cd:80\",\"rssi\":\"-86\",\"ch\":\"9\"},{\"mac\":\"20:f1:7c:c5:cd:85\",\"rssi\":\"-91\",\"ch\":\"9\"}]},\n" +
                 "{\"id\":\"00e58d53\",\"data\":[{\"mac\":\"bc:d1:77:8e:26:78\",\"rssi\":\"-94\",\"ch\":\"11\"},{\"mac\":\"14:d1:1f:3e:bb:ac\",\"rssi\":\"-76\",\"ch\":\"11\"},{\"mac\":\"20:f1:7c:d4:05:41\",\"rssi\":\"-86\",\"ch\":\"12\"}]}]";
-            return ToDataTable(json,false);
+            return ToDataTable(json, false);
         }
         public static DataTable Init2()
         {
@@ -165,8 +166,13 @@ namespace FoxtableLib
             return result;
         }
 
-        public static DataTable ToDataTableWithArrayList(ArrayList arrayList)
+        public static DataTable ToDataTable(ArrayList arrayList)
         {
+            //Foxtable.HttpClient httpClient = new Foxtable.HttpClient("http://localhost:8000/api/XmlToJson");
+            //httpClient.ContentType = "application/xml";
+
+            //httpClient.Content = "<Invoice gcInvoice=\"LP1034234324234\"></Invoice>";
+            ////Foxtable.OO_00oOO.Tables["abc"]
             DataTable dataTable = new DataTable();  //实例化
             if (arrayList == null) return dataTable;
             DataTable result;
@@ -205,7 +211,43 @@ namespace FoxtableLib
             result = dataTable;
             return result;
         }
-        public static DataTable ToDataTable(string json,bool simple=true)
+        public static ArrayList ToArrayList(DataTable dt)
+        {
+            ArrayList arrayList = new ArrayList();
+            if (dt != null && dt.Rows.Count > 0)
+            {            
+                foreach (DataRow dataRow in dt.Rows)
+                {
+                    Dictionary<string, object> dictionary = new Dictionary<string, object>();
+                    foreach (DataColumn dataColumn in dt.Columns)
+                    {
+                        if (String.IsNullOrEmpty(excludeFields.SingleOrDefault(f => f.ToLower().Equals(dataColumn.ColumnName.ToLower()))))
+                        {
+                            dictionary.Add(dataColumn.ColumnName, dataRow[dataColumn.ColumnName].ToString());
+                        }
+                    }
+                    arrayList.Add(dictionary);
+                }
+                return arrayList;
+            }
+            return arrayList;
+        }
+        public static void AddRowToArrayList(ArrayList arrayList, DataRow dataRow,DataColumnCollection columns)
+        {
+            if (dataRow != null)
+            {
+                Dictionary<string, object> dictionary = new Dictionary<string, object>();
+                foreach (DataColumn dataColumn in columns)
+                {
+                    if (String.IsNullOrEmpty(excludeFields.SingleOrDefault(f => f.ToLower().Equals(dataColumn.ColumnName.ToLower()))))
+                    {
+                        dictionary.Add(dataColumn.ColumnName, dataRow[dataColumn.ColumnName].ToString());
+                    }
+                }
+                arrayList.Add(dictionary);
+            }
+        }
+        public static DataTable ToDataTable(string json, bool simple = true)
         {
             return simple ? ToDataTableWithSimple(json) : ToDataTableWithComplex(json);
         }
@@ -237,6 +279,43 @@ namespace FoxtableLib
             return jsSerializer.Serialize(parentRow);
         }
 
+        public static ArrayList ToArrayListModel<T>(DataTable dt) where T : new()
+        {
+            return new ArrayList(ToListModel<T>(dt).ToArray());
+        }
+        public static IList<T> ToListModel<T>(DataTable dt) where T : new()
+        {
+            // 定义集合    
+            IList<T> ts = new List<T>();
+
+            // 获得此模型的类型   
+            Type type = typeof(T);
+            string tempName = "";
+
+            foreach (DataRow dr in dt.Rows)
+            {
+                T t = new T();
+                // 获得此模型的公共属性      
+                PropertyInfo[] propertys = t.GetType().GetProperties();
+                foreach (PropertyInfo pi in propertys)
+                {
+                    tempName = pi.Name;  // 检查DataTable是否包含此列    
+
+                    if (dt.Columns.Contains(tempName))
+                    {
+                        // 判断此属性是否有Setter      
+                        if (!pi.CanWrite) continue;
+
+                        object value = dr[tempName];
+                        if (value != DBNull.Value)
+                            pi.SetValue(t, value, null);
+                    }
+                }
+                ts.Add(t);
+            }
+            return ts;
+        }
+
         public static string ToJsonWithJsonNet(DataTable table)
         {
             string jsonString = string.Empty;
@@ -259,6 +338,65 @@ namespace FoxtableLib
         {
             DataTable table = JsonConvert.DeserializeObject<DataTable>(json, new DataTableConverter());
             return table;
+        }
+        public static IList<T> ConvertTo<T>(DataTable table)
+        {
+            if (table == null)
+            {
+                return null;
+            }
+
+            List<DataRow> rows = new List<DataRow>();
+
+            foreach (DataRow row in table.Rows)
+            {
+                rows.Add(row);
+            }
+
+            return ConvertTo<T>(rows);
+        }
+
+        public static IList<T> ConvertTo<T>(IList<DataRow> rows)
+        {
+            IList<T> list = null;
+
+            if (rows != null)
+            {
+                list = new List<T>();
+
+                foreach (DataRow row in rows)
+                {
+                    T item = CreateItem<T>(row);
+                    list.Add(item);
+                }
+            }
+
+            return list;
+        }
+
+        public static T CreateItem<T>(DataRow row)
+        {
+            T obj = default(T);
+            if (row != null)
+            {
+                obj = Activator.CreateInstance<T>();
+
+                foreach (DataColumn column in row.Table.Columns)
+                {
+                    PropertyInfo prop = obj.GetType().GetProperty(column.ColumnName);
+                    try
+                    {
+                        object value = row[column.ColumnName];
+                        prop.SetValue(obj, value, null);
+                    }
+                    catch
+                    {  //You can log something here     
+                       //throw;    
+                    }
+                }
+            }
+
+            return obj;
         }
     }
 }
