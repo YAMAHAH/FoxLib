@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System;
 
-namespace FT
+namespace FoxtableLib
 {
     /// <summary>
     /// Converts a DataTable to JSON. Note no support for deserialization

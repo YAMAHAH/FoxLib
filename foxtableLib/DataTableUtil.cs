@@ -7,10 +7,12 @@ using System.Linq;
 using System.Reflection;
 using System.Web.Script.Serialization;
 
-namespace FT
+namespace FoxtableLib
 {
-    public class DTUtil
+    public class DataTableUtil
     {
+        public const string native_DataTable = "InnerNativeDataTable";
+        public static Dictionary<string, object> VarStore = new Dictionary<string, object>();
         public static DataTable Init()
         {
             String json = "[{\"id\":\"00e58d51\",\"data\":[{\"mac\":\"20:f1:7c:c5:cd:80\",\"rssi\":\"-86\",\"ch\":\"9\"},{\"mac\":\"20:f1:7c:c5:cd:85\",\"rssi\":\"-91\",\"ch\":\"9\"}]},\n" +
@@ -98,6 +100,7 @@ namespace FT
                                 {
                                     DataRow dataRow = dataTable.NewRow();
                                     dataRow[root] = dictionary[root];
+                                  
                                     foreach (string key in dic.Keys)
                                     {
                                         dataRow[key] = dic[key];
@@ -125,6 +128,7 @@ namespace FT
         {
             DataTable dataTable = new DataTable();  //实例化
             DataTable result;
+            List<String> tableKeys = new List<string>();
             try
             {
                 JavaScriptSerializer javaScriptSerializer = new JavaScriptSerializer
@@ -146,15 +150,30 @@ namespace FT
                         {
                             foreach (string current in dictionary.Keys)
                             {
-                                dataTable.Columns.Add(current, dictionary[current].GetType());
+                                Type colType = dictionary[current].GetType();
+                                if (colType == typeof(ArrayList))
+                                {
+                                    colType = typeof(DataTable);
+                                    tableKeys.Add(current);
+                                }
+                                dataTable.Columns.Add(current, colType);
                             }
+                            dataTable.Columns.Add(native_DataTable, typeof(DataTable));
                         }
                         //Rows
                         DataRow dataRow = dataTable.NewRow();
                         foreach (string current in dictionary.Keys)
                         {
-                            dataRow[current] = dictionary[current];
+                            if(string.IsNullOrEmpty(tableKeys.SingleOrDefault(k=>k == current)))
+                            {
+                                dataRow[current] = dictionary[current];
+                            }else
+                            {
+                                dataRow[current] = ToDataTable(dictionary[current] as ArrayList);
+                            }
+                            
                         }
+                        dataRow[native_DataTable] = dataTable;
                         dataTable.Rows.Add(dataRow); //循环添加行到DataTable中
                     }
                 }
@@ -194,6 +213,7 @@ namespace FT
                             {
                                 dataTable.Columns.Add(current, dictionary[current].GetType());
                             }
+                            dataTable.Columns.Add(native_DataTable, typeof(DataTable));
                         }
                         //Rows
                         DataRow dataRow = dataTable.NewRow();
@@ -201,6 +221,7 @@ namespace FT
                         {
                             dataRow[current] = dictionary[current];
                         }
+                        dataRow[native_DataTable] = dataTable;
                         dataTable.Rows.Add(dataRow); //循环添加行到DataTable中
                     }
                 }
@@ -256,7 +277,8 @@ namespace FT
             "_Locked",
             "System_Filter_Unique",
             "System_Sort_Temporary",
-            "System_Filter_Temporary"
+            "System_Filter_Temporary",
+             native_DataTable
         };
 
         public static string ToJson(DataTable table)
@@ -271,7 +293,15 @@ namespace FT
                 {
                     if (String.IsNullOrEmpty(excludeFields.SingleOrDefault(f => f.ToLower().Equals(col.ColumnName.ToLower()))))
                     {
-                        childRow.Add(col.ColumnName, row[col]);
+                        if(row[col].GetType() == typeof(DataTable)) //toArrayList
+                        {
+                            childRow.Add(col.ColumnName, ToJson(row[col] as DataTable));
+                        }
+                        else
+                        {
+                            childRow.Add(col.ColumnName, row[col]);
+                        }
+                        
                     }
                 }
                 parentRow.Add(childRow);
