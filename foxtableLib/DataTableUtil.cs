@@ -253,6 +253,7 @@ namespace FoxtableLib
             }
             return arrayList;
         }
+
         public static void AddRowToArrayList(ArrayList arrayList, DataRow dataRow,DataColumnCollection columns)
         {
             if (dataRow != null)
@@ -295,7 +296,7 @@ namespace FoxtableLib
                     {
                         if(row[col].GetType() == typeof(DataTable)) //toArrayList
                         {
-                            childRow.Add(col.ColumnName, ToJson(row[col] as DataTable));
+                            childRow.Add(col.ColumnName, ToArrayList(row[col] as DataTable));
                         }
                         else
                         {
